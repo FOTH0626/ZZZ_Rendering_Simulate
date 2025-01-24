@@ -283,6 +283,7 @@ Shader "ZZZ/AvatarUI"
         }
 
         CBUFFER_START(UnityPerMaterial)
+        
         float4 _Color;
         
         sampler2D _MainTex;
@@ -319,7 +320,7 @@ Shader "ZZZ/AvatarUI"
         float _ScreenSpaceRimFadeout;
         float _ScreenSpaceRimBrightness;
         
-        float _ScreenspaceShadowWidth;
+        float _ScreenSpaceShadowWidth;
         float _ScreenSpaceShadowThreshold;
         float _ScreenSpaceShadowFadeout;
         
@@ -444,7 +445,7 @@ Shader "ZZZ/AvatarUI"
         int _MatCapBlendMode3;
         int _MatCapBlendMode4;
         int _MatCapBlendMode5;
-
+        
         CBUFFER_END
 
         struct UniversalAttributes
@@ -530,6 +531,24 @@ Shader "ZZZ/AvatarUI"
             normalWS *= isFrontFace ? 1 : -1;
             pixelNormalWS *= isFrontFace ? 1 : -1; 
 
+            float shadowAttenuation = 1.0;
+            #if _SCREEN_SPACE_SHADOW
+            {
+              float linearEyeDepth = input.positionCS.w;
+              float perspective =  1.0 / linearEyeDepth;
+              float offsetMul = _ScreenSpaceShadowWidth * 5.0 * perspective / 100.0;
+              
+              float3 lightDirectionVS = TransformWorldToViewDir(lightDirectionWS);
+              float2 offset = lightDirectionVS.xy * offsetMul;
+              int2 coord =  input.positionCS.xy +  offset * _ScaledScreenParams.xy;
+              coord = min(max(0,coord), _ScaledScreenParams.xy - 1);
+              float offsetSceneDepth =  LoadSceneDepth(coord);
+              float offsetSceneLinearEyeDepth = LinearEyeDepth(offsetSceneDepth, _ZBufferParams);
+              
+              float fadeout = max(1e-5, _ScreenSpaceShadowFadeout);
+              shadowAttenuation = saturate((offsetSceneLinearEyeDepth - (linearEyeDepth - _ScreenSpaceShadowThreshold)) * 50 / fadeout);
+            }
+            #endif
 
             float baseAttenuation = 1.0;
             {
@@ -568,6 +587,19 @@ Shader "ZZZ/AvatarUI"
               albedoSSS = saturate(min(1-aRamp[4], aRamp[3]));
               albedoFront = saturate(min(1-aRamp[5], aRamp[4]));
               albedoForward = saturate(aRamp[5]);
+
+              float sRamp[2] = {
+                2.0 * shadowAttenuation,
+                2.0 * shadowAttenuation - 1
+              };
+
+              albedoShallowFade *= saturate(sRamp[0]);
+              albedoShallowFade += (1 - albedoShadowFade - albedoShadow) * saturate(1 - sRamp[0]);
+              albedoShallow *= saturate(min(sRamp[0], 1 - sRamp[1])) + saturate(sRamp[1]);
+              albedoSSS *= saturate(min(sRamp[0], 1 - sRamp[1])) + saturate(sRamp[1]);
+              albedoSSS += (albedoFront + albedoForward) * saturate(min(sRamp[0], 1 - sRamp[1]));
+              albedoFront *= saturate(sRamp[1]);
+              albedoForward *= saturate(sRamp[1]);
             }
             
             float3 shadowFadeColor = 1.0;
@@ -824,6 +856,7 @@ Shader "ZZZ/AvatarUI"
 
             ENDHLSL
         }
+
         Pass
         {
           Name"UniversalForwardOnly"
