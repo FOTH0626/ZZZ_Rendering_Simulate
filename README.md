@@ -21,3 +21,6 @@ Lambert Light and Shadow
 
 Screen Space Shadow
 ![](Image/ScreenSpaceShadow.png)
+
+SDF Face Shadow
+![](Image/SDF%20Face%20Shadow.png)

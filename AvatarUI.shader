@@ -507,6 +507,11 @@ Shader "ZZZ/AvatarUI"
             float3 lightDirectionWS = normalize(mainLight.direction);
             float3 lightColor = mainLight.color;
 
+            float angleMapping = 0;
+            float angleFunction = 0;
+            float angleThreshold = 0.0;
+            float angleMapMask = 0; 
+
             float sgn = input.tangentWS.w;
             float3 tangentWS = normalize(input.tangentWS.xyz);
             float3 bitangentWS = sgn* cross(normalWS.xyz, tangentWS.xyz);
@@ -526,7 +531,34 @@ Shader "ZZZ/AvatarUI"
               float4 otherData = tex2D(_OtherDataTex, input.uv);
               materialId = max(0, 4 - floor(otherData.x * 5));
             }
+            #elif _DOMAIN_FACE
+            {
+              float3 headForward = normalize(_HeadForward - _HeadCenter);
+              float3 headRight = normalize(_HeadRight - _HeadCenter);
+              float3 headUp = normalize(cross(headForward, headRight));
+
+              float3 lightDirectionProjHeadWS = lightDirectionWS - dot(lightDirectionWS,headUp) * headUp;
+              lightDirectionProjHeadWS = normalize(lightDirectionProjHeadWS);
+
+              float sX = dot(lightDirectionProjHeadWS, headRight);
+              float sZ = dot(lightDirectionProjHeadWS, -headForward);
+              angleThreshold = atan2(sX, sZ) / 3.14159265359;
+              angleThreshold = angleThreshold > 0 ? (1 - angleThreshold) : (1 + angleThreshold);
+
+              float2 angleUV = input.uv;
+              if (dot(lightDirectionProjHeadWS, headRight) > 0)
+              {
+                angleUV.x = 1.0 - angleUV.x;
+              }
+
+              float4 angleData = tex2D(_LightTex, angleUV);
+              angleMapping = angleData.r;
+              angleFunction = angleData.g;
+              angleMapMask = angleData.a; 
+            }
             #endif
+
+
 
             normalWS *= isFrontFace ? 1 : -1;
             pixelNormalWS *= isFrontFace ? 1 : -1; 
@@ -602,6 +634,49 @@ Shader "ZZZ/AvatarUI"
               albedoForward *= saturate(sRamp[1]);
             }
             
+            float a = 0;
+            #if _DOMAIN_FACE
+            {
+              float s = lerp(_AlbedoSmoothness, 0.025, saturate(2.5 * (angleFunction - 0.5)));
+              s = max(1e-5, s);
+
+              float angleAttenuation = 0.6 + (angleMapping *1.2 -0.6)/ (s *4 +1) -angleThreshold;
+              
+              float aRamp[3] = {
+                angleAttenuation / s,
+                angleAttenuation / s -1,
+                angleAttenuation / 0.125 - 16*s
+              };
+
+              float angleShadowFade = saturate(1 - aRamp[0]);
+              float angleShadow = 0;
+              float angleShallowFade = 0;
+              float angleShallow = 0;
+              float angleSSS = min(saturate(1 - aRamp[1]), saturate(aRamp[0]));
+              float angleFront = min(saturate(1 - aRamp[2]), saturate(aRamp[1]));
+              float angleForward = saturate(aRamp[2]);
+
+              float sRamp[1]= {
+                2 * shadowAttenuation 
+              };
+
+              angleShadowFade *= saturate(1- sRamp[0]);
+              angleShallowFade += (1 - angleForward - angleFront - angleSSS - angleShallow) * saturate(sRamp[0]);
+              angleShallowFade += (angleSSS + angleFront + angleForward) * saturate(1 - sRamp[0]);
+              angleSSS *= saturate(sRamp[0]);
+              angleFront *= saturate(sRamp[0]);
+              angleForward *= saturate(sRamp[0]);
+
+              albedoShadowFade = lerp(albedoShadowFade,angleShadowFade,angleMapMask);
+              albedoShadow = lerp(albedoShadow,angleShadow,angleMapMask);
+              albedoShallowFade = lerp(albedoShallowFade,angleShallowFade,angleMapMask);
+              albedoShallow = lerp(albedoShallow,angleShallow,angleMapMask);
+              albedoSSS = lerp(albedoSSS,angleSSS,angleMapMask);
+              albedoFront = lerp(albedoFront,angleFront,angleMapMask);
+              albedoForward = lerp(albedoForward,angleForward,angleMapMask);
+            }
+            #endif
+
             float3 shadowFadeColor = 1.0;
             float3 shadowColor = 1.0;
             float3 shallowFadeColor = 1.0;
