@@ -7,8 +7,8 @@ Shader "ZZZ/AvatarUI"
         [Header(Main Maps)] _Color ("Color", Color)=(1,1,1,1)
         [NoScaleoffset] _MainTex ("Texture",2D)="white"{}
         [NoScaleoffset] _LightTex ("Light Tex",2D)="linearGray"{}
-        [NoScaleoffset] _OtherDataTex ("other Data Tex",2D) = "white"{}
-        [NoScale0ffset] _otherDataTex2 ("Other Data Tex",2D)="white"{}
+        [NoScaleoffset] _OtherDataTex ("Other Data Tex",2D) = "white"{}
+        [NoScale0ffset] _OtherDataTex2 ("Other Data Tex",2D)= "white"{}
             
             
         _NoseLineHoriDisp ("HoriDisappear Value",Range(0.85,0.98))=0.92
@@ -234,6 +234,18 @@ Shader "ZZZ/AvatarUI"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
         
+        #define DEFINE_SELECT(TYPE) \
+        TYPE select(int id, TYPE e0, TYPE e1, TYPE e2, TYPE e3, TYPE e4) {return TYPE(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}\
+        TYPE##2 select(int id, TYPE##2 e0, TYPE##2 e1, TYPE##2 e2, TYPE##2 e3, TYPE##2 e4) {return TYPE##2(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}\        
+        TYPE##3 select(int id, TYPE##3 e0, TYPE##3 e1, TYPE##3 e2, TYPE##3 e3, TYPE##3 e4) {return TYPE##3(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}\        
+        TYPE##4 select(int id, TYPE##4 e0, TYPE##4 e1, TYPE##4 e2, TYPE##4 e3, TYPE##4 e4) {return TYPE##4(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}
+
+        DEFINE_SELECT(bool)
+        DEFINE_SELECT(uint)
+        DEFINE_SELECT(int)
+        DEFINE_SELECT(float)
+        DEFINE_SELECT(half)
+
         CBUFFER_START(UnityPerMaterial)
         float4 _Color;
         
@@ -658,7 +670,192 @@ Shader "ZZZ/AvatarUI"
 
             ENDHLSL
         }
+        Pass
+        {
+          Name"UniversalForwardOnly"
+          Tags
+          {
+              "LightMode" = "UniversalForwardOnly"
+          }
+          Cull Front
+          ZWrite On
+          
+          HLSLPROGRAM
+          #pragma shader_feature_local _OUTLINE_PASS
+  
+          #pragma vertex vert
+          #pragma fragment frag
+              
+          #pragma multi_compile_fog
 
+          // If your project has a faster way to get camera fov in shader, you can replace this slow function to your method.
+          // For example, you write cmd.SetGlobalFloat("_CurrentCameraFOV",cameraFOV) using a new RendererFeature in C#.
+          // For this tutorial shader, we will keep things simple and use this slower but convenient method to get camera fov
+          float GetCameraFOV()
+          {
+              //https://answers.unity.com/questions/770838/how-can-i-extract-the-fov-information-from-the-pro.html
+              float t = unity_CameraProjection._m11;
+              float Rad2Deg = 180 / 3.1415;
+              float fov = atan(1.0f / t) * 2.0 * Rad2Deg;
+              return fov;
+          }
+          
+          float ApplyOutlineDistanceFadeOut(float inputMulFix)
+          {
+              //make outline "fadeout" if character is too small in camera's view
+              return saturate(inputMulFix);
+          }
+          
+          float GetOutlineCameraFovAndDistanceFixMultiplier(float positionVS_Z)
+          {
+              float cameraMulFix;
+              if(unity_OrthoParams.w == 0)
+              {
+                  ////////////////////////////////
+                  // Perspective camera case
+                  ////////////////////////////////
+          
+                  // keep outline similar width on screen accoss all camera distance       
+                  cameraMulFix = abs(positionVS_Z);
+          
+                  // can replace to a tonemap function if a smooth stop is needed
+                  cameraMulFix = ApplyOutlineDistanceFadeOut(cameraMulFix);
+          
+                  // keep outline similar width on screen accoss all camera fov
+                  cameraMulFix *= GetCameraFOV();       
+              }
+              else
+              {
+                  ////////////////////////////////
+                  // Orthographic camera case
+                  ////////////////////////////////
+                  float orthoSize = abs(unity_OrthoParams.y);
+                  orthoSize = ApplyOutlineDistanceFadeOut(orthoSize);
+                  cameraMulFix = orthoSize * 50; // 50 is a magic number to match perspective camera's outline width
+              }
+          
+              return cameraMulFix * 0.00005; // mul a const to make return result = default normal expand amount WS
+          }
+
+          // Push an imaginary vertex towards camera in view space (linear, view space unit), 
+          // then only overwrite original positionCS.z using imaginary vertex's result positionCS.z value
+          // Will only affect ZTest ZWrite's depth value of vertex shader
+          
+          // Useful for:
+          // -Hide ugly outline on face/eye
+          // -Make eyebrow render on top of hair
+          // -Solve ZFighting issue without moving geometry
+          float4 NiloGetNewClipPosWithZOffset(float4 originalPositionCS, float viewSpaceZOffsetAmount)
+          {
+              if(unity_OrthoParams.w == 0)
+              {
+                  ////////////////////////////////
+                  //Perspective camera case
+                  ////////////////////////////////
+                  float2 ProjM_ZRow_ZW = UNITY_MATRIX_P[2].zw;
+                  float modifiedPositionVS_Z = -originalPositionCS.w + -viewSpaceZOffsetAmount; // push imaginary vertex
+                  float modifiedPositionCS_Z = modifiedPositionVS_Z * ProjM_ZRow_ZW[0] + ProjM_ZRow_ZW[1];
+                  originalPositionCS.z = modifiedPositionCS_Z * originalPositionCS.w / (-modifiedPositionVS_Z); // overwrite positionCS.z
+                  return originalPositionCS;    
+              }
+              else
+              {
+                  ////////////////////////////////
+                  //Orthographic camera case
+                  ////////////////////////////////
+                  originalPositionCS.z += -viewSpaceZOffsetAmount / _ProjectionParams.z; // push imaginary vertex and overwrite positionCS.z
+                  return originalPositionCS;
+              }
+          }
+
+          float3 OctToUnitVector(float2 oct)
+          {
+              float3 N = float3(oct, 1-dot(1,abs(oct)) );
+              float t = max(-N.z,0);
+              N.x += N.x >= 0 ? (-t) : t;
+              N.y += N.y >= 0 ? (-t) : t;
+              return normalize(N);
+          }
+          
+          struct Attributes
+          {
+              float4 positionOS   :POSITION;
+              float4 tangentOS    :TANGENT;
+              float3 normalOS     :NORMAL;
+              float2 texcoord     :TEXCOORD0;
+              float2 texcoord1    :TEXCOORD1;
+          };
+  
+          struct Varyings
+          {
+              float2 uv           :TEXCOORD0;
+              float fogFactor     :TEXCOORD1;
+              float4 positionCS   :SV_POSITION;
+          };
+          
+          Varyings vert(Attributes input)
+          {
+            #if !_OUTLINE_PASS
+                return (Varyings)0;
+            #endif
+
+
+            VertexPositionInputs positionInputs = GetVertexPositionInputs(input.positionOS.xyz);
+            VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS, input.tangentOS);
+
+            float width = _OutlineWidth;
+            width = GetOutlineCameraFovAndDistanceFixMultiplier(positionInputs.positionVS.z);
+
+            float2 oct = input.texcoord1;
+            float3 smoothNormal = OctToUnitVector(oct);
+            float3x3 tbn = float3x3(
+                normalInputs.tangentWS,
+                normalInputs.bitangentWS,
+                normalInputs.normalWS
+            );
+            smoothNormal = mul(smoothNormal, tbn);
+            
+            float3 positionWS = positionInputs.positionWS.xyz;
+            // positionWS += normalInputs.normalWS * width;
+            positionWS += smoothNormal * width;
+            
+            Varyings output = (Varyings)0;
+            output.positionCS = NiloGetNewClipPosWithZOffset( TransformWorldToHClip(positionWS), _MaxOutlineZOffset);
+            output.uv = input.texcoord;
+            output.fogFactor = ComputeFogFactor(positionInputs.positionCS.z);
+
+            return  output;
+          }
+  
+          float4 frag(Varyings input) : SV_Target
+          {
+            #if !_OUTLINE_PASS
+            clip(-1);
+            #endif
+
+            float3 outlineColor = 0;
+
+            #if _DOMAIN_FACE
+            {
+                outlineColor =  _OutlineColor;
+            }
+            #elif _DOMAIN_BODY
+            {
+              float4 otherData = tex2D(_OtherDataTex, input.uv);
+              int materialId = max(0, 4 - floor(otherData.x * 5)); 
+              outlineColor = select(materialId, _OutlineColor, _OutlineColor2, _OutlineColor3, _OutlineColor4, _OutlineColor5);
+            }
+            #endif
+
+            outlineColor *= 0.2;
+            
+            float4 color = float4(outlineColor, 1);
+            color.rgb = MixFog(color.rgb, input.fogFactor);
+            
+            return color;
+          }
+          ENDHLSL
+        }
         
     }
 }

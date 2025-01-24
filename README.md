@@ -10,5 +10,8 @@ flow this tutorials on bilibili
 
 I will show Render Changes in this README
 
-BaseColor
+BaseColor 
 ![](Image/BaseColor.png)
+
+Outline(look at the Skin's outline is **Red** and Cloth is **Gray** )
+![](Image/Outline.png)
