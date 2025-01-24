@@ -456,8 +456,22 @@ Shader "ZZZ/AvatarUI"
                 baseAlpha = mainTex.a;
             }
             #endif
+
+            float3 normalWS = normalize(input.normalWS);
+
+            float3 positionWS = input.positionWSAndFogFactor.xyz;
+
+            float4 shadowCoord = TransformWorldToShadowCoord(positionWS);
+            Light mainLight = GetMainLight(shadowCoord);
+            float3 lightDirectionWS = normalize(mainLight.direction);
+
+            float baseAttenuation = 1.0;
+            {
+              float NoL = dot(normalWS, lightDirectionWS);
+              baseAttenuation = NoL;
+            }
             
-            return float4(baseColor, baseAlpha);
+            return float4(baseAttenuation.xxx, baseAlpha);
         }
         
         ENDHLSL
