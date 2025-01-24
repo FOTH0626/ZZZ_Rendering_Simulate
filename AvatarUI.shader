@@ -234,10 +234,27 @@ Shader "ZZZ/AvatarUI"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
         
+        #define DEFINE_MINMAX3(TYPE) \
+        TYPE min3(TYPE a , TYPE b, TYPE c) {return TYPE(min(min(a,b),c));}\
+        TYPE##2 min3(TYPE##2 a , TYPE##2 b, TYPE##2 c) {return TYPE##2(min(min(a,b),c));}\
+        TYPE##3 min3(TYPE##3 a , TYPE##3 b, TYPE##3 c) {return TYPE##3(min(min(a,b),c));}\
+        TYPE##4 min3(TYPE##4 a , TYPE##4 b, TYPE##4 c) {return TYPE##4(min(min(a,b),c));}\
+        \
+        TYPE max3(TYPE a , TYPE b, TYPE c) {return TYPE(max(max(a,b),c));}\
+        TYPE##2 max3(TYPE##2 a , TYPE##2 b, TYPE##2 c) {return TYPE##2(max(max(a,b),c));}\
+        TYPE##3 max3(TYPE##3 a , TYPE##3 b, TYPE##3 c) {return TYPE##3(max(max(a,b),c));}\
+        TYPE##4 max3(TYPE##4 a , TYPE##4 b, TYPE##4 c) {return TYPE##4(max(max(a,b),c));}
+
+        DEFINE_MINMAX3(bool)
+        DEFINE_MINMAX3(uint)
+        DEFINE_MINMAX3(int)
+        DEFINE_MINMAX3(float)
+        DEFINE_MINMAX3(half)
+
         #define DEFINE_SELECT(TYPE) \
         TYPE select(int id, TYPE e0, TYPE e1, TYPE e2, TYPE e3, TYPE e4) {return TYPE(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}\
-        TYPE##2 select(int id, TYPE##2 e0, TYPE##2 e1, TYPE##2 e2, TYPE##2 e3, TYPE##2 e4) {return TYPE##2(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}\        
-        TYPE##3 select(int id, TYPE##3 e0, TYPE##3 e1, TYPE##3 e2, TYPE##3 e3, TYPE##3 e4) {return TYPE##3(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}\        
+        TYPE##2 select(int id, TYPE##2 e0, TYPE##2 e1, TYPE##2 e2, TYPE##2 e3, TYPE##2 e4) {return TYPE##2(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}\
+        TYPE##3 select(int id, TYPE##3 e0, TYPE##3 e1, TYPE##3 e2, TYPE##3 e3, TYPE##3 e4) {return TYPE##3(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}\
         TYPE##4 select(int id, TYPE##4 e0, TYPE##4 e1, TYPE##4 e2, TYPE##4 e3, TYPE##4 e4) {return TYPE##4(id > 0 ? (id > 1 ? (id > 2 ? (id > 3 ? e4 : e3) : e2) : e1) : e0);}
 
         DEFINE_SELECT(bool)
@@ -245,6 +262,25 @@ Shader "ZZZ/AvatarUI"
         DEFINE_SELECT(int)
         DEFINE_SELECT(float)
         DEFINE_SELECT(half)
+
+        float AverageColor(float3 color)
+        {
+            return dot(color, float3(1.0, 1.0, 1.0)) / 3.0;
+        }
+
+        float NormalizeColorByAverage(float3 color)
+        {
+          float average = AverageColor(color);
+          return color / max(average, 1e-5);
+          
+        }
+
+        float3 ScaleColorByMax(float3 color)
+        {
+          float maxComponent = max3(color.r, color.g, color.b);
+          maxComponent = min(maxComponent, 1.0);
+          return float3(color * maxComponent);
+        }
 
         CBUFFER_START(UnityPerMaterial)
         float4 _Color;
@@ -458,20 +494,124 @@ Shader "ZZZ/AvatarUI"
             #endif
 
             float3 normalWS = normalize(input.normalWS);
+            float3 pixelNormalWS = normalWS;
+            float diffuseBias = 0;
 
+            int materialId = 0;
+            
             float3 positionWS = input.positionWSAndFogFactor.xyz;
 
             float4 shadowCoord = TransformWorldToShadowCoord(positionWS);
             Light mainLight = GetMainLight(shadowCoord);
             float3 lightDirectionWS = normalize(mainLight.direction);
+            float3 lightColor = mainLight.color;
+
+            float sgn = input.tangentWS.w;
+            float3 tangentWS = normalize(input.tangentWS.xyz);
+            float3 bitangentWS = sgn* cross(normalWS.xyz, tangentWS.xyz);
+
+            #if _DOMAIN_BODY
+            {
+              float4 lightData = tex2D(_LightTex, input.uv);
+              lightData = lightData * 2.0 - 1.0;
+              diffuseBias = lightData.z * 2.0;
+
+              float3 pixelNormalTS = float3(lightData.xy, 0.0);
+              pixelNormalTS.xy *= _BumpScale;
+              pixelNormalTS.z = sqrt(1.0 - min(0.0, dot(pixelNormalTS.xy, pixelNormalTS.xy)));
+              pixelNormalWS = TransformTangentToWorld(pixelNormalTS, float3x3(tangentWS,bitangentWS, normalWS));
+              pixelNormalWS = normalize(pixelNormalWS);
+
+              float4 otherData = tex2D(_OtherDataTex, input.uv);
+              materialId = max(0, 4 - floor(otherData.x * 5));
+            }
+            #endif
+
+            normalWS *= isFrontFace ? 1 : -1;
+            pixelNormalWS *= isFrontFace ? 1 : -1; 
+
 
             float baseAttenuation = 1.0;
             {
-              float NoL = dot(normalWS, lightDirectionWS);
+              float NoL = dot(pixelNormalWS, lightDirectionWS);
               baseAttenuation = NoL;
+              baseAttenuation += diffuseBias;
+            }
+
+            float albedoSmoothness = max(1e-5, _AlbedoSmoothness);
+
+            float albedoShadowFade = 1.0;
+            float albedoShadow = 1.0;
+            float albedoShallowFade = 1.0;
+            float albedoShallow = 1.0;
+            float albedoSSS = 1.0;
+            float albedoFront = 1.0;
+            float albedoForward = 1.0;
+            {
+              float attenuation = baseAttenuation * 1.5;
+              float s0 = albedoSmoothness * 1.5;
+              float s1 = 1.0 - s0;
+
+              float aRamp[6] = {
+                (attenuation + 1.5 ) / s1 + 0.0 ,
+                (attenuation + 0.5 ) / s0 + 0.5 ,
+                (attenuation + 0.0 ) / s1 + 0.5 ,
+                (attenuation - 0.5 ) / s0 + 0.5 ,
+                (attenuation - 0.5 ) / s0 - 0.5 ,
+                (attenuation - 2.0 ) / s1 + 1.5 ,
+              };
+
+              albedoShadowFade = saturate(1 - aRamp[0]);
+              albedoShadow = saturate(min(1 - aRamp[1], aRamp[0]));
+              albedoShallowFade = saturate(min(1-aRamp[2], aRamp[1]));
+              albedoShallow = saturate(min(1-aRamp[3], aRamp[2]));
+              albedoSSS = saturate(min(1-aRamp[4], aRamp[3]));
+              albedoFront = saturate(min(1-aRamp[5], aRamp[4]));
+              albedoForward = saturate(aRamp[5]);
             }
             
-            return float4(baseAttenuation.xxx, baseAlpha);
+            float3 shadowFadeColor = 1.0;
+            float3 shadowColor = 1.0;
+            float3 shallowFadeColor = 1.0;
+            float3 shallowColor = 1.0;
+            float3 sssColor = 1.0;
+            float3 frontColor = 1.0;
+            float3 forwardColor = 1.0;
+            {
+              float zFade = saturate(input.positionCS.w * 0.43725);
+
+              shadowColor = select(materialId, _ShadowColor, _ShadowColor2, _ShadowColor3, _ShadowColor4, _ShadowColor5);
+
+              shadowColor = lerp(NormalizeColorByAverage(shadowColor), shadowColor, zFade);
+              shadowFadeColor = shadowColor * _PostShadowFadeTint;
+              shadowColor *= _PostShadowTint;
+
+              shallowColor = select(materialId, _ShallowColor, _ShallowColor2, _ShallowColor3, _ShallowColor4, _ShallowColor5);
+
+              shallowColor = lerp(NormalizeColorByAverage(shallowColor), shallowColor, zFade);
+              shallowFadeColor = shallowColor * _PostShallowFadeTint;
+              shallowColor *= _PostShallowTint;
+
+              sssColor = _PostSssTint;
+              frontColor = _PostFrontTint;
+              forwardColor = 1.0;
+            }
+
+            float3 lightColorScaleByMax = ScaleColorByMax(lightColor);
+            
+            float3 albedo = 
+                      (albedoForward * forwardColor 
+                      + albedoFront * frontColor 
+                      + albedoSSS * sssColor) * lightColor;
+            
+            albedo += (albedoShadowFade * shadowFadeColor
+                      + albedoShadow * shadowColor
+                      + albedoShallowFade * shallowFadeColor
+                      + albedoShallow * shallowColor) * lightColorScaleByMax;
+
+            // float a = abs(albedoShadowFade + albedoShadow + albedoShallowFade + albedoShallow + albedoSSS + albedoFront + albedoForward - 1.0) < 0.01;
+
+            return float4(albedo * baseColor, baseAlpha);
         }
         
         ENDHLSL
@@ -818,7 +958,7 @@ Shader "ZZZ/AvatarUI"
             VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS, input.tangentOS);
 
             float width = _OutlineWidth;
-            width = GetOutlineCameraFovAndDistanceFixMultiplier(positionInputs.positionVS.z);
+            width *= GetOutlineCameraFovAndDistanceFixMultiplier(positionInputs.positionVS.z);
 
             float2 oct = input.texcoord1;
             float3 smoothNormal = OctToUnitVector(oct);

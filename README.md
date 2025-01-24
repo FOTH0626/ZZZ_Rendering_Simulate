@@ -15,3 +15,6 @@ BaseColor
 
 Outline(look at the Skin's outline is **Red** and Cloth is **Gray** )
 ![](Image/Outline.png)
+
+Lambert Light and Shadow
+![](Image/Lambert.png)
