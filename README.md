@@ -30,3 +30,6 @@ Nose Line
 
 MatCap (include gauntlet(metal armor on the arm) and pantyhose)
 ![](Image/MatCap.png)
+
+Gamma
+![](Image/Gamma.png)

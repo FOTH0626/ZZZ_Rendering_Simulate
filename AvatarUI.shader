@@ -282,6 +282,15 @@ Shader "ZZZ/AvatarUI"
           return float3(color * maxComponent);
         }
 
+        float3 ClampColorMax (float3 color)
+        {
+          float maxComponent = max3(color.r, color.g, color.b);   
+          if(maxComponent > 1.0){
+            return color/maxComponent;
+          }  
+          return color;
+        } 
+
         CBUFFER_START(UnityPerMaterial)
         
         float4 _Color;
@@ -823,7 +832,30 @@ Shader "ZZZ/AvatarUI"
             }    
             #endif
 
-            return float4(capColor * albedo, baseAlpha);
+            float3 gammaColor = capColor;
+            {
+              float pixelNoL = dot(lightDirectionWS, pixelNormalWS);
+              float  NoL = dot(lightDirectionWS, normalWS);
+
+              float occlusion  = saturate(1- 3* (NoL - pixelNoL)) * 2;
+              occlusion *= sqrt(occlusion);
+              occlusion = min(1, occlusion);
+
+              float attenuation = lerp((pixelNoL * 0.5 + 0.5)* occlusion, saturate(pixelNoL), 0.5);
+
+              float3 capColorClamped = ClampColorMax(capColor);
+
+              float luminance = Luminance(capColor);
+              float gamma = lerp(luminance * 0.2875 + 1.4375, 1, attenuation);
+
+              float3 capColorGamma = pow(max(1e-5, capColorClamped), gamma);
+              float3 capColorGammaHalf = lerp(capColor, capColorGamma, 0.5);
+
+              gammaColor = lerp(capColorGammaHalf, capColorGamma, saturate(NoL));
+
+            }
+
+            return float4(gammaColor * albedo, baseAlpha);
         }
         
         ENDHLSL
