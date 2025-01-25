@@ -23,6 +23,8 @@ public class HeadVector : MonoBehaviour
         Update();
     }
     #endif
+    
+    
     void Update()
     {
         if (allRanderers == null)
@@ -40,8 +42,8 @@ public class HeadVector : MonoBehaviour
                     if (mat.shader.name == "ZZZ/AvatarUI")
                     {
                         mat.SetVector(headCenterID, HeadBoneTransform.position);
-                        mat.SetVector(headRightID, HeadForwardTransform.position);
-                        mat.SetVector(headForwardID, HeadRightTransform.position);
+                        mat.SetVector(headForwardID, HeadForwardTransform.position);
+                        mat.SetVector(headRightID, HeadRightTransform.position); 
                     }
                 }
             }

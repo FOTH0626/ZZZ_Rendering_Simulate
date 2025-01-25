@@ -11,7 +11,7 @@ Shader "ZZZ/AvatarUI"
         [NoScale0ffset] _OtherDataTex2 ("Other Data Tex",2D)= "white"{}
             
             
-        _NoseLineHoriDisp ("HoriDisappear Value",Range(0.85,0.98))=0.92
+        _NoseLineHoriDisp ("Hori Disappear Value",Range(0.85,0.98))=0.92
         _NoseLineLkDnDisp ("LookDown Disappear Value",Range(0.5,0.7))=0.62
             
         _AlphaClip("Alpha Clipping",Range(0,1))=0.333
@@ -485,7 +485,7 @@ Shader "ZZZ/AvatarUI"
         {
             float4 mainTex =tex2D(_MainTex, input.uv);
             mainTex *= _Color;
-
+                
             float3 baseColor = mainTex.rgb;
             float baseAlpha = 1.0;
             #if _DOMAIN_BODY || _DOMAIN_EYE
@@ -498,9 +498,12 @@ Shader "ZZZ/AvatarUI"
             float3 pixelNormalWS = normalWS;
             float diffuseBias = 0;
 
+            
             int materialId = 0;
             
             float3 positionWS = input.positionWSAndFogFactor.xyz;
+
+            float3 viewDirectionWS = normalize(input.viewDirectionWS);
 
             float4 shadowCoord = TransformWorldToShadowCoord(positionWS);
             Light mainLight = GetMainLight(shadowCoord);
@@ -555,6 +558,16 @@ Shader "ZZZ/AvatarUI"
               angleMapping = angleData.r;
               angleFunction = angleData.g;
               angleMapMask = angleData.a; 
+
+              float3 outlineColor = _OutlineColor * 0.2;
+              float viewDotHeadUp = dot(headUp, viewDirectionWS);
+              float viewDotHeadForward = dot(headForward, viewDirectionWS); 
+
+              float dispValue = lerp(_NoseLineLkDnDisp, _NoseLineHoriDisp, smoothstep(0, 0.75, saturate(viewDotHeadUp + 0.85)) );
+              dispValue = viewDotHeadForward - dispValue;
+              dispValue = smoothstep(0, 0.02, dispValue);
+              dispValue -= mainTex.a;
+              baseColor = lerp(baseColor, outlineColor, saturate(dispValue));
             }
             #endif
 
@@ -564,7 +577,7 @@ Shader "ZZZ/AvatarUI"
             pixelNormalWS *= isFrontFace ? 1 : -1; 
 
             float shadowAttenuation = 1.0;
-            #if _SCREEN_SPACE_SHADOW
+            #if _SCREEN_SPACE_SHADOW && _DOMAIN_BODY
             {
               float linearEyeDepth = input.positionCS.w;
               float perspective =  1.0 / linearEyeDepth;
@@ -634,7 +647,6 @@ Shader "ZZZ/AvatarUI"
               albedoForward *= saturate(sRamp[1]);
             }
             
-            float a = 0;
             #if _DOMAIN_FACE
             {
               float s = lerp(_AlbedoSmoothness, 0.025, saturate(2.5 * (angleFunction - 0.5)));
@@ -642,6 +654,7 @@ Shader "ZZZ/AvatarUI"
 
               float angleAttenuation = 0.6 + (angleMapping *1.2 -0.6)/ (s *4 +1) -angleThreshold;
               
+
               float aRamp[3] = {
                 angleAttenuation / s,
                 angleAttenuation / s -1,
@@ -716,7 +729,7 @@ Shader "ZZZ/AvatarUI"
                       + albedoShallowFade * shallowFadeColor
                       + albedoShallow * shallowColor) * lightColorScaleByMax;
 
-            // float a = abs(albedoShadowFade + albedoShadow + albedoShallowFade + albedoShallow + albedoSSS + albedoFront + albedoForward - 1.0) < 0.01;
+
 
             return float4(albedo * baseColor, baseAlpha);
         }
