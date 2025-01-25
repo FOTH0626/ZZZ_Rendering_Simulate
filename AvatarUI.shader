@@ -191,7 +191,7 @@ Shader "ZZZ/AvatarUI"
         [Enum(UnityEngine.Rendering.Stencilop)]_StencilPassOp ("Stencil pass operation",Int)=0
         [Enum(UnityEngine.Rendering.Stencilop)]_StencilFailOp ("Stencil fail operation",Int)=0
         [Enum(UnityEngine.Rendering.Stencilop)]_StencilZFailOp ("Stencil Z fail operation",Int)=0
-       
+      
         [Header(SRP Default)]
         [Toggle(_SRP_DEFAULT_PASS)]_SRPDefaultPass ("SRP Default Pass",Int)=0
         [Enum(UnityEngine.Rendering.BlendMode)]_SRPSrcBlendMode ("SRP src blend mode (Default One)",Float)=1
@@ -498,7 +498,7 @@ Shader "ZZZ/AvatarUI"
             float3 pixelNormalWS = normalWS;
             float diffuseBias = 0;
 
-            
+            float matCapMask = 0;
             int materialId = 0;
             
             float3 positionWS = input.positionWSAndFogFactor.xyz;
@@ -533,6 +533,9 @@ Shader "ZZZ/AvatarUI"
 
               float4 otherData = tex2D(_OtherDataTex, input.uv);
               materialId = max(0, 4 - floor(otherData.x * 5));
+
+              float4 otherData2 = tex2D(_OtherDataTex2, input.uv);
+              matCapMask = otherData2.b;
             }
             #elif _DOMAIN_FACE
             {
@@ -729,9 +732,98 @@ Shader "ZZZ/AvatarUI"
                       + albedoShallowFade * shallowFadeColor
                       + albedoShallow * shallowColor) * lightColorScaleByMax;
 
+            float3 capColor = baseColor;
+            #if _MATCAP_ON && _DOMAIN_BODY
+            {
+              float mask = matCapMask;
 
+              float3 normalVS = TransformWorldToViewDir(pixelNormalWS);
+              float2 capUV = normalVS.xy * 0.5 + 0.5;
 
-            return float4(albedo * baseColor, baseAlpha);
+              float refract = select(materialId,
+                              _MatCapRefract,
+                              _MatCapRefract2, 
+                              _MatCapRefract3, 
+                              _MatCapRefract4, 
+                              _MatCapRefract5);
+              
+              if(refract > 0.5){
+                float4 param = select(materialId,
+                              _RefractParam,
+                              _RefractParam2, 
+                              _RefractParam3, 
+                              _RefractParam4, 
+                              _RefractParam5);
+
+                float depth = select(materialId,
+                              _RefractDepth,
+                              _RefractDepth2, 
+                              _RefractDepth3, 
+                              _RefractDepth4, 
+                              _RefractDepth5);
+
+                capUV = capUV * depth + param.xy * input.uv + param.zw;
+              }
+
+              capColor = select(materialId,
+                              tex2D(_MatCapTex, capUV).rgb,
+                              tex2D(_MatCapTex2, capUV).rgb,
+                              tex2D(_MatCapTex3, capUV).rgb,
+                              tex2D(_MatCapTex4, capUV).rgb,
+                              tex2D(_MatCapTex5, capUV).rgb
+                              );
+              
+              float3 tintColor = select(materialId,
+                                  _MatCapColorTint,
+                                  _MatCapColorTint2,
+                                  _MatCapColorTint3,
+                                  _MatCapColorTint4,
+                                  _MatCapColorTint5);
+
+              float alphaBurst = select(materialId,
+                                      _MatCapAlphaBurst,
+                                      _MatCapAlphaBurst2,
+                                      _MatCapAlphaBurst3,
+                                      _MatCapAlphaBurst4,
+                                      _MatCapAlphaBurst5);
+
+              float colorBurst = select(materialId,
+                                      _MatCapColorBurst,
+                                      _MatCapColorBurst2,
+                                      _MatCapColorBurst3,
+                                      _MatCapColorBurst4,
+                                      _MatCapColorBurst5);
+
+              int blendMode = select(materialId,
+                              _MatCapBlendMode,
+                              _MatCapBlendMode2,
+                              _MatCapBlendMode3,
+                              _MatCapBlendMode4,
+                              _MatCapBlendMode5);
+
+              if (blendMode == 0){
+                float alpha = saturate(alphaBurst * mask);
+                float3 blendColor = tintColor * capColor * colorBurst;
+                capColor = lerp(baseColor, blendColor, alpha);
+              }
+              else if (blendMode == 1)
+              {
+                float alpha = saturate(alphaBurst * mask);
+                float3 blendColor = tintColor * capColor * colorBurst;
+                capColor = baseColor + alpha * blendColor;
+              }
+              else if (blendMode == 2)
+              {
+                float alpha = saturate(alphaBurst * mask);
+                float3 blendColor = (capColor * tintColor - 0.5) * colorBurst + capColor * tintColor;
+                blendColor = saturate(blendColor);
+                blendColor = lerp(0.5, blendColor, alpha);
+                capColor = lerp(blendColor * baseColor * 2 , 1- 2* (1 -baseColor)*(1-blendColor), baseColor >= 0.5);
+              }
+            }    
+            #endif
+
+            return float4(capColor * albedo, baseAlpha);
         }
         
         ENDHLSL

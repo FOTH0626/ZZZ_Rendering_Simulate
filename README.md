@@ -27,3 +27,6 @@ SDF Face Shadow
 
 Nose Line
 ![](Image/NoseLine.png)
+
+MatCap (include gauntlet(metal armor on the arm) and pantyhose)
+![](Image/MatCap.png)
