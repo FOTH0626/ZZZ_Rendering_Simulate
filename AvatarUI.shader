@@ -988,7 +988,17 @@ Shader "ZZZ/AvatarUI"
 
             #endif
 
-            return float4(pbrDiffuseColor * albedo + pbrSpecularColor * specularColor * albedo, baseAlpha);
+            float3 ambientColor = SampleSH(pixelNormalWS) * gammaColor * _AmbientColorIntensity;
+
+            float3 color = pbrDiffuseColor * albedo + pbrSpecularColor * specularColor * albedo;
+
+            color += ambientColor;
+
+            color += max(0, pbrSpecularColor * specularColor * albedo - 1);
+
+            color = MixFog(color, input.positionWSAndFogFactor.w);
+
+            return float4(color, baseAlpha);
         }
         
         ENDHLSL

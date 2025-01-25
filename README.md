@@ -36,3 +36,6 @@ Gamma
 
 Specular
 ![](Image/Specular.png)
+
+Ambient
+![](Image/Ambient.png)
