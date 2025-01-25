@@ -33,3 +33,6 @@ MatCap (include gauntlet(metal armor on the arm) and pantyhose)
 
 Gamma
 ![](Image/Gamma.png)
+
+Specular
+![](Image/Specular.png)

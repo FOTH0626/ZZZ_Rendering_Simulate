@@ -358,7 +358,7 @@ Shader "ZZZ/AvatarUI"
         float _HighlightShape2;
         float _HighlightShape3;
         float _HighlightShape4;
-        float _Highlightshape5;
+        float _HighlightShape5;
         
         float ToonSpecular;
         float _ToonSpecular2;
@@ -507,6 +507,10 @@ Shader "ZZZ/AvatarUI"
             float3 pixelNormalWS = normalWS;
             float diffuseBias = 0;
 
+            float metallic = 0.0;
+            float specularMask = 0.0;
+            float smoothness = 0.58; 
+
             float matCapMask = 0;
             int materialId = 0;
             
@@ -543,8 +547,14 @@ Shader "ZZZ/AvatarUI"
               float4 otherData = tex2D(_OtherDataTex, input.uv);
               materialId = max(0, 4 - floor(otherData.x * 5));
 
+              metallic = _Metallic *  otherData.g;
+              specularMask = otherData.b;
+              
+
               float4 otherData2 = tex2D(_OtherDataTex2, input.uv);
               matCapMask = otherData2.b;
+              smoothness = _Glossiness * otherData2.g;
+
             }
             #elif _DOMAIN_FACE
             {
@@ -580,6 +590,9 @@ Shader "ZZZ/AvatarUI"
               dispValue = smoothstep(0, 0.02, dispValue);
               dispValue -= mainTex.a;
               baseColor = lerp(baseColor, outlineColor, saturate(dispValue));
+
+              metallic *= _Metallic;
+              smoothness *= _Glossiness;
             }
             #endif
 
@@ -855,7 +868,127 @@ Shader "ZZZ/AvatarUI"
 
             }
 
-            return float4(gammaColor * albedo, baseAlpha);
+            float3 pbrDiffuseColor = lerp(0.96 * gammaColor, 0 , metallic);
+            float3 pbrSpecularColor = lerp(0.04 , gammaColor, metallic);
+            float3 specularColor = 0;
+
+            
+            #if _DOMAIN_BODY
+            {
+              float shape = select(materialId,
+                              _HighlightShape, 
+                              _HighlightShape2, 
+                              _HighlightShape3, 
+                              _HighlightShape4, 
+                              _HighlightShape5);
+
+              float range = select(materialId,
+                              _SpecularRange, 
+                              _SpecularRange2, 
+                              _SpecularRange3, 
+                              _SpecularRange4, 
+                              _SpecularRange5);
+
+              float3 halfWS = normalize(lightDirectionWS + viewDirectionWS);
+              float3 LoH = dot(lightDirectionWS, halfWS);
+              float rangeLoH = saturate(range * LoH * 0.75 + 0.25);
+              float rangeLoH2 = max(0.1, rangeLoH * rangeLoH);
+
+              float NoL = dot(pixelNormalWS, lightDirectionWS);
+              float rangeNoL = saturate(range * NoL * 0.75 + 0.25);
+
+
+              float specular = 0;
+              if(shape > 0.5)
+              {
+                bool useSphere = _HeadSphereRange > 0;
+
+                float3 shpereNormalWS = positionWS - _HeadCenter;
+                float len = length(shpereNormalWS);
+                shpereNormalWS = normalize(shpereNormalWS);
+                float sphereUsage = 1.0 - saturate((len - _HeadSphereRange) * 20);
+                float3 shapeNormalWS = lerp(pixelNormalWS, shpereNormalWS, sphereUsage);
+
+                float attenuation = saturate( baseAttenuation * 1.5 +0.5);
+                float shapeNoL = dot(lightDirectionWS, shapeNormalWS);
+                float shapeAttenuation = sqrt(saturate(shapeNoL * 0.5 + 0.5));
+
+                shapeNormalWS = useSphere ? shapeNormalWS : pixelNormalWS;
+                shapeAttenuation = useSphere ? shapeAttenuation : attenuation;
+
+                float NoH = dot(shapeNormalWS, halfWS);
+                float NoH01 = saturate(NoH * 0.5 + 0.5);
+
+                specular = NoH01 * shapeAttenuation + specularMask -1 ;
+
+                float softness = select(materialId,
+                              _ShapeSoftness, 
+                              _ShapeSoftness2,   
+                              _ShapeSoftness3, 
+                              _ShapeSoftness4, 
+                              _ShapeSoftness5);
+
+                specular = saturate(specular / softness);
+                specular = specular * min(1.0 , 1.0 / (6.0 * rangeLoH2)) * rangeNoL; 
+
+
+              }
+              else
+              {
+                float perceptualRoughness = 1 - smoothness; 
+                float roughness = perceptualRoughness * perceptualRoughness;
+                float normalizationTerm = roughness * 4 + 2;
+                float roughness2 = roughness * roughness;
+                float roughness2MinusOne = roughness2 - 1;
+
+                float NoH = dot(pixelNormalWS, halfWS);
+                float rangeNoH = saturate(range * NoH * 0.75 + 0.25);
+
+                float d = rangeNoH  * rangeNoH * roughness2MinusOne + 1;
+                float d2 = d * d;
+
+                float ggx = roughness2 / (d2 * rangeLoH2 * normalizationTerm);
+                specular = saturate(ggx - smoothness) * rangeNoL;
+
+                specular /= max(1e-5,roughness);
+
+                float toon = select(materialId,
+                              ToonSpecular, 
+                              _ToonSpecular2, 
+                              _ToonSpecular3, 
+                              _ToonSpecular4, 
+                              _ToonSpecular5);
+                
+                float size = select(materialId,
+                              _ModelSize, 
+                              _Modelsize2, 
+                              _ModelSize3, 
+                              _Modelsize4, 
+                              _ModelSize5);
+                
+                specular *= toon * size * specularMask;
+                specular *= 10;
+                specular = saturate(specular);
+
+              }  
+
+              specular *= 100;
+              specular *= _SpecIntensity;
+
+              float3 tintColor = select(materialId,
+                              _SpecularColor, 
+                              _SpecularColor2, 
+                              _SpecularColor3, 
+                              _SpecularColor4, 
+                              _SpecularColor5);
+              
+              specularColor = specular * tintColor;
+
+            }
+
+            #endif
+
+            return float4(pbrDiffuseColor * albedo + pbrSpecularColor * specularColor * albedo, baseAlpha);
         }
         
         ENDHLSL
