@@ -5,10 +5,10 @@ Shader "ZZZ/AvatarUI"
         [KeywordEnum(None,Face,Eye,Body)]_Domain ("Domain",Float) = 0
             
         [Header(Main Maps)] _Color ("Color", Color)=(1,1,1,1)
-        [NoScaleoffset] _MainTex ("Texture",2D)="white"{}
-        [NoScaleoffset] _LightTex ("Light Tex",2D)="linearGray"{}
-        [NoScaleoffset] _OtherDataTex ("Other Data Tex",2D) = "white"{}
-        [NoScale0ffset] _OtherDataTex2 ("Other Data Tex",2D)= "white"{}
+        [NoScaleOffset] _MainTex ("Texture",2D)="white"{}
+        [NoScaleOffset] _LightTex ("Light Tex",2D)="linearGray"{}
+        [NoScaleOffset] _OtherDataTex ("Other Data Tex",2D) = "white"{}
+        [NoScaleOffset] _OtherDataTex2 ("Other Data Tex",2D)= "white"{}
             
             
         _NoseLineHoriDisp ("Hori Disappear Value",Range(0.85,0.98))=0.92
@@ -29,8 +29,8 @@ Shader "ZZZ/AvatarUI"
             
         [Enum(s0,0,s1,1,s2,2,s3,3,s4,4,s5,5)] _SkinMatId ("SkinMatId",Float) = 0
             
-        _Modelsize ("Model Size 1",Range(0,100)) =1
-        _Modelsize2 ("Model Size 2",Range(0,100)) =1
+        _ModelSize ("Model Size 1",Range(0,100)) =1
+        _ModelSize2 ("Model Size 2",Range(0,100)) =1
         _ModelSize3 ("Model Size 3",Range(0,100)) =1
         _ModelSize4 ("Model Size 4",Range(0,100)) =1
         _ModelSize5 ("Model Size 5",Range(0,100)) =1
@@ -168,11 +168,11 @@ Shader "ZZZ/AvatarUI"
         _RefractDepth4 ("Refract Depth 4",Range(0,2))=0.5
         _RefractDepth5 ("Refract Depth 5",Range(0,2))=0.5
         
-        _RefractParam ("Refract Wrapoffset 1",Vector)=(5,5,0,0)
-        _RefractParam2 ("Refract Wrapoffset 2",Vector)=(5,5,0,0)
-        _RefractParam3 ("Refract Wrapoffset 3",Vector)=(5,5,0,0)
-        _RefractParam4 ("Refract Wrapoffset 4",Vector)=(5,5,0,0)
-        _RefractParam5 ("Refract Wrapoffset 5",Vector)=(5,5,0,0)
+        _RefractParam ("Refract WrapOffset 1",Vector)=(5,5,0,0)
+        _RefractParam2 ("Refract WrapOffset 2",Vector)=(5,5,0,0)
+        _RefractParam3 ("Refract WrapOffset 3",Vector)=(5,5,0,0)
+        _RefractParam4 ("Refract WrapOffset 4",Vector)=(5,5,0,0)
+        _RefractParam5 ("Refract WrapOffset 5",Vector)=(5,5,0,0)
         
         [Enum(AlphaBlended,0,Add,1,Overlay,2)]_MatCapBlendMode ("MatCap Blend Mode 1",Float)=0
         [Enum(AlphaBlended,0,Add,1,Overlay,2)]_MatCapBlendMode2 ("MatCap Blend Mode 2",Float)=0
@@ -188,9 +188,9 @@ Shader "ZZZ/AvatarUI"
         [Enum(UnityEngine.Rendering.BlendOp)]_BlendOp ("Blend operation (Default Add)",Float)=0
         _StencilRef ("Stencil reference",Int)=0
         [Enum(UnityEngine.Rendering.CompareFunction)]_StencilComp ("Stencil compare function",Int)=0
-        [Enum(UnityEngine.Rendering.Stencilop)]_StencilPassOp ("Stencil pass operation",Int)=0
-        [Enum(UnityEngine.Rendering.Stencilop)]_StencilFailOp ("Stencil fail operation",Int)=0
-        [Enum(UnityEngine.Rendering.Stencilop)]_StencilZFailOp ("Stencil Z fail operation",Int)=0
+        [Enum(UnityEngine.Rendering.StencilOp)]_StencilPassOp ("Stencil pass operation",Int)=0
+        [Enum(UnityEngine.Rendering.StencilOp)]_StencilFailOp ("Stencil fail operation",Int)=0
+        [Enum(UnityEngine.Rendering.StencilOp)]_StencilZFailOp ("Stencil Z fail operation",Int)=0
       
         [Header(SRP Default)]
         [Toggle(_SRP_DEFAULT_PASS)]_SRPDefaultPass ("SRP Default Pass",Int)=0
@@ -200,9 +200,9 @@ Shader "ZZZ/AvatarUI"
         
         _SRPStencilRef ("SRP stencil reference",Int)=0
         [Enum(UnityEngine.Rendering.CompareFunction)]_SRPStencilComp ("SRP stencil compare function",Int)=0
-        [Enum(UnityEngine.Rendering.Stencilop)]_SRPStencilPassOp ("SRP stencil pass operation",Int)=0
-        [Enum(UnityEngine.Rendering.Stencilop)]_SRPStencilFailOp ("SRP stencil fail operation",Int)=0
-        [Enum(UnityEngine.Rendering.Stencilop)]_SRPStencilZFailOp ("SRP stencil Z fail operation",Int)=0
+        [Enum(UnityEngine.Rendering.StencilOp)]_SRPStencilPassOp ("SRP stencil pass operation",Int)=0
+        [Enum(UnityEngine.Rendering.StencilOp)]_SRPStencilFailOp ("SRP stencil fail operation",Int)=0
+        [Enum(UnityEngine.Rendering.StencilOp)]_SRPStencilZFailOp ("SRP stencil Z fail operation",Int)=0
     }
     SubShader
     {
@@ -296,7 +296,7 @@ Shader "ZZZ/AvatarUI"
             return dot(color, float3(1.0, 1.0, 1.0)) / 3.0;
         }
 
-        float NormalizeColorByAverage(float3 color)
+        float3 NormalizeColorByAverage(float3 color)
         {
           float average = AverageColor(color);
           return color / max(average, 1e-5);
@@ -347,9 +347,9 @@ Shader "ZZZ/AvatarUI"
         int _SkinMatId;
         
         float _ModelSize;
-        float _Modelsize2;
+        float _ModelSize2;
         float _ModelSize3;
-        float _Modelsize4;
+        float _ModelSize4;
         float _ModelSize5;
         
         float _ScreenSpaceRimWidth;
@@ -388,7 +388,7 @@ Shader "ZZZ/AvatarUI"
         float _HighlightShape4;
         float _HighlightShape5;
         
-        float ToonSpecular;
+        float _ToonSpecular;
         float _ToonSpecular2;
         float _ToonSpecular3;
         float _ToonSpecular4;
@@ -981,7 +981,7 @@ Shader "ZZZ/AvatarUI"
                 specular /= max(1e-5,roughness);
 
                 float toon = select(materialId,
-                              ToonSpecular, 
+                              _ToonSpecular, 
                               _ToonSpecular2, 
                               _ToonSpecular3, 
                               _ToonSpecular4, 
@@ -989,9 +989,9 @@ Shader "ZZZ/AvatarUI"
                 
                 float size = select(materialId,
                               _ModelSize, 
-                              _Modelsize2, 
+                              _ModelSize2, 
                               _ModelSize3, 
-                              _Modelsize4, 
+                              _ModelSize4, 
                               _ModelSize5);
                 
                 specular *= toon * size * specularMask;
@@ -1328,6 +1328,47 @@ Shader "ZZZ/AvatarUI"
             #pragma multi_compile_fog
 
             ENDHLSL
+        }
+
+        Pass
+        {
+          Name "SRPDefaultUnlit"
+          Tags
+          {
+            "LightMode" = "SRPDefaultUnlit"
+          }
+          Cull[_Cull]
+          Blend[_SRPSrcBlendMode] [_SRPDstBlendMode]
+          BlendOp [_SRPBlendOp]
+          ZWrite [_ZWrite]
+          Stencil{
+            Ref [_SRPStencilRef]
+            Comp [_SRPStencilComp]
+            Pass [_SRPStencilPassOp]
+            Fail [_SRPStencilFailOp]
+            ZFail [_SRPStencilZFailOp]
+          }
+
+          HLSLPROGRAM
+          #pragma shader_feature_local _SRP_DEFAULT_PASS
+          #pragma shader_feature_local _SCREEN_SPACE_RIM
+          #pragma shader_feature_local _SCREEN_SPACE_SHADOW
+          #pragma shader_feature_local _MATCAP_ON
+
+          #pragma vertex MainVS2
+          #pragma fragment MainPS2
+
+          #pragma multi_compile_fog
+
+          #if _SRP_DEFAULT_PASS
+          UniversalVaryings MainVS2(UniversalAttributes input){ return MainVS(input); }
+          float4 MainPS2(UniversalVaryings input, bool isFrontFace : SV_IsFrontFace) : SV_Target { return MainPS(input,isFrontFace);}
+          #else
+          void MainVS2() {};
+          void MainPS2() {};
+          #endif
+
+          ENDHLSL
         }
 
         Pass
