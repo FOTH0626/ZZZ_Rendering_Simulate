@@ -38,7 +38,7 @@ Shader "ZZZ/AvatarUI"
             
         [Header(Screen Space Rim)]
         [Toggle(_SCREEN_SPACE_RIM)] _ScreenSpaceRim ("Screen Space Rim",Float)=1
-        _ScreenSpaceRimwidth ("Screen Space Rim Width",Range(0,10))=1
+        _ScreenSpaceRimWidth ("Screen Space Rim Width",Range(0,10))=1
         _ScreenSpaceRimThreshold("Screen Space Rim Threshold",Range(0,1))=0.01
         _ScreenSpaceRimFadeout ("Screen Space Rim Fadeout",Range(0,10))=0.5
         _ScreenSpaceRimBrightness("Screen Space Rim Brightness",Range(0,10))= 1
@@ -262,6 +262,34 @@ Shader "ZZZ/AvatarUI"
         DEFINE_SELECT(int)
         DEFINE_SELECT(float)
         DEFINE_SELECT(half)
+
+        #define DEFINE_POW(TYPE)\
+        TYPE pow2(TYPE x){ return TYPE(x * x);}\
+        TYPE##2 pow2(TYPE##2 x){ return TYPE##2(x * x);}\
+        TYPE##3 pow2(TYPE##3 x){ return TYPE##3(x * x);}\
+        TYPE##4 pow2(TYPE##4 x){ return TYPE##4(x * x);}\
+        TYPE pow3(TYPE x){ return TYPE(x * x * x);}\
+        TYPE##2 pow3(TYPE##2 x){ return TYPE##2(x * x * x);}\
+        TYPE##3 pow3(TYPE##3 x){ return TYPE##3(x * x * x);}\
+        TYPE##4 pow3(TYPE##4 x){ return TYPE##4(x * x * x);}\
+        TYPE pow4(TYPE x){ TYPE xx = x * x; return TYPE(xx * xx);}\
+        TYPE##2 pow4(TYPE##2 x){ TYPE##2 xx = x * x; return TYPE##2 (xx * xx);}\
+        TYPE##3 pow4(TYPE##3 x){ TYPE##3 xx = x * x; return TYPE##3 (xx * xx);}\
+        TYPE##4 pow4(TYPE##4 x){ TYPE##4 xx = x * x; return TYPE##4 (xx * xx);}\
+        TYPE pow5(TYPE x){ TYPE xx = x * x; return TYPE (xx * xx * x);}\
+        TYPE##2 pow5(TYPE##2 x){ TYPE##2 xx = x * x; return TYPE##2 (xx * xx * x);}\
+        TYPE##3 pow5(TYPE##3 x){ TYPE##3 xx = x * x; return TYPE##3 (xx * xx * x);}\
+        TYPE##4 pow5(TYPE##4 x){ TYPE##4 xx = x * x; return TYPE##4 (xx * xx * x);}\
+        TYPE pow6(TYPE x){ TYPE xx = x * x; return TYPE (xx * xx * xx);}\
+        TYPE##2 pow6(TYPE##2 x){ TYPE##2 xx = x * x; return TYPE##2 (xx * xx * xx);}\
+        TYPE##3 pow6(TYPE##3 x){ TYPE##3 xx = x * x; return TYPE##3 (xx * xx * xx);}\
+        TYPE##4 pow6(TYPE##4 x){ TYPE##4 xx = x * x; return TYPE##4 (xx * xx * xx);}
+
+        DEFINE_POW(bool)
+        DEFINE_POW(uint)
+        DEFINE_POW(int)
+        DEFINE_POW(float)
+        DEFINE_POW(half)
 
         float AverageColor(float3 color)
         {
@@ -990,13 +1018,103 @@ Shader "ZZZ/AvatarUI"
 
             float3 ambientColor = SampleSH(pixelNormalWS) * gammaColor * _AmbientColorIntensity;
 
+            float3 rimGlowColor = 0; 
+            {
+              bool isSkin = materialId == _SkinMatId;
+
+              float LoV = dot(lightDirectionWS, viewDirectionWS);
+              float viewAttenuation = -LoV * 0.5 + 0.5;
+              viewAttenuation = pow2(viewAttenuation);
+              float edgeAttenuation = 1 - pow4(pow5(viewAttenuation));
+              viewAttenuation = viewAttenuation * 0.5 + 0.5;
+
+              float verticalAttenuation = pixelNormalWS.y * 0.5 + 0.5;
+              verticalAttenuation = isSkin ? verticalAttenuation : pow2(verticalAttenuation);
+              verticalAttenuation = smoothstep(0, 1, verticalAttenuation);
+
+              float lightAttenuation = saturate( dot(pixelNormalWS, lightDirectionWS) ) * shadowAttenuation;
+
+              float cameraDistance = length(input.viewDirectionWS);
+              
+              float NoV = dot(viewDirectionWS, pixelNormalWS);
+              float fresnelDistanceFade = (isSkin ? 0.75 : 0.65) - 0.45 * min(1, cameraDistance /12.0);
+              float fresnelAttenuation = 1 - NoV - fresnelDistanceFade;
+              float fresnelSoftness = isSkin ? 0.2 : 0.3;
+              fresnelAttenuation = smoothstep(0, fresnelSoftness, fresnelAttenuation);  
+
+              float distanceAttenuation = 1 - 0.7 * saturate(cameraDistance * 0.2 - 1);
+
+              float3 sunColor = select(materialId,
+                              _UISunColor, 
+                              _UISunColor2, 
+                              _UISunColor3, 
+                              _UISunColor4, 
+                              _UISunColor5);
+              
+              float sunLuminace = Luminance(sunColor);
+              sunColor = isSkin ? sunColor : sunLuminace.xxx;
+
+              float3 sunColorScaled = pow2(pow4(sunColor)); 
+              sunColorScaled /= max(1e-5, dot(sunColorScaled, 0.7));
+
+              sunColor = AverageColor(sunColor) * sunColorScaled;
+              sunColor = lerp(albedo, sunColor, shadowAttenuation);
+              sunColor = lerp(albedo, sunColor, edgeAttenuation); 
+
+              float3 rimDiffuse = pow(max(1e-5, pbrDiffuseColor), 0.2);
+              rimDiffuse = normalize(rimDiffuse);
+              float diffuseBrightness = AverageColor(pbrDiffuseColor);
+              diffuseBrightness = (1- 0.2 * pow2(diffuseBrightness)) * 0.1;
+              rimDiffuse *= diffuseBrightness;
+
+              float3 rimSpecular = pbrSpecularColor;
+
+              float3 rimColor = lerp(rimDiffuse, rimSpecular, metallic);
+              rimColor *= 48;
+              rimColor *= fresnelAttenuation * verticalAttenuation * viewAttenuation * lightAttenuation * distanceAttenuation * sunColor;
+
+              float3 glowColor = select(materialId,
+                              _RimGlowLightColor, 
+                              _RimGlowLightColor2, 
+                              _RimGlowLightColor3, 
+                              _RimGlowLightColor4, 
+                              _RimGlowLightColor5);
+
+              rimColor *= glowColor;
+
+              float3 rimColorBrightness = AverageColor(rimColor);
+              rimColorBrightness = pow2(rimColorBrightness);
+              rimColorBrightness = 1 + 0.5 * rimColorBrightness;
+              rimColor *= rimColorBrightness;
+
+              float screenSpaceRim = 1.0;
+              #if _SCREEN_SPACE_RIM
+              {
+                float linearEyeDepth = input.positionCS.w;
+                float3 normalVS = TransformWorldToViewDir(normalWS);
+                float2 uvOffset = float2(normalize(normalVS.xy)) * _ScreenSpaceRimWidth / linearEyeDepth;
+                int2 texPos = input.positionCS.xy + uvOffset;
+                texPos = min(max(0, texPos), _ScaledScreenParams.xy - 1);
+                float offsetSceneDepth = LoadSceneDepth(texPos);
+                float offsetSceneLinearEyeDepth = LinearEyeDepth(offsetSceneDepth, _ZBufferParams);
+                screenSpaceRim = saturate((offsetSceneLinearEyeDepth - (linearEyeDepth + _ScreenSpaceRimThreshold)) * 10 / _ScreenSpaceRimFadeout);
+                screenSpaceRim *= _ScreenSpaceRimBrightness;
+
+
+              } 
+              #endif
+
+
+              rimGlowColor = rimColor * screenSpaceRim;
+            }
+
             float3 color = pbrDiffuseColor * albedo + pbrSpecularColor * specularColor * albedo;
-
             color += ambientColor;
-
             color += max(0, pbrSpecularColor * specularColor * albedo - 1);
+            color += rimGlowColor;    
 
             color = MixFog(color, input.positionWSAndFogFactor.w);
+          
 
             return float4(color, baseAlpha);
         }

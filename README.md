@@ -39,3 +39,6 @@ Specular
 
 Ambient
 ![](Image/Ambient.png)
+
+RimLight
+![](Image/RimLight.png)
