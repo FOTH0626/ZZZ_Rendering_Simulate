@@ -10,6 +10,40 @@ flow this tutorials on bilibili
 
 I will show Render Changes in this README
 
+# Texture
+All Magic is in Linear Color Space instead of Gamma Space
+
+## Base Color
+
+## Red Magic
+- R : Material Index
+- G : Metallic info
+- B ： Highligths Mask
+
+## Gray Magic
+- RG : Normal 
+- B : Diffuse Bias
+
+## Orange Magic
+- R : idk , seems base color's alpha
+- G : Smoothness
+- B : mask of MatCap
+
+## MatCap Texture:
+- Metallic reflection
+- pantyhose/stockings
+- Highlight
+
+## Face
+- RGB ：Face Color
+- A : nose line
+
+## Face Green Magic
+- R : SDF grayscale value
+- G : smoothness offset of change
+- B : outline width
+- A : mask , interpolate to Lambert
+
 BaseColor 
 ![](Image/BaseColor.png)
 
