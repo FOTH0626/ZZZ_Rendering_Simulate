@@ -4,7 +4,8 @@ Shader "ZZZ/AvatarUI"
     {
         [KeywordEnum(None,Face,Eye,Body)]_Domain ("Domain",Float) = 0
             
-        [Header(Main Maps)] _Color ("Color", Color)=(1,1,1,1)
+        [Header(Main Maps)]
+        _Color ("Color", Color)=(1,1,1,1)
         [NoScaleOffset] _MainTex ("Texture",2D)="white"{}
         [NoScaleOffset] _LightTex ("Light Tex",2D)="linearGray"{}
         [NoScaleOffset] _OtherDataTex ("Other Data Tex",2D) = "white"{}
@@ -495,7 +496,7 @@ Shader "ZZZ/AvatarUI"
 
         struct UniversalVaryings
         {
-            float2 uv                       :TEXCOORDO;
+            float2 uv                       :TEXCOORD0;
             float4 positionWSAndFogFactor   :TEXCOORD1;
             float3 normalWS                 :TEXCOORD2;
             float4 tangentWS                :TEXCOORD3;
@@ -1128,7 +1129,6 @@ Shader "ZZZ/AvatarUI"
             Tags
             {
             "LightMode"="ShadowCaster"
-                
             }
             ZWrite [_ZWrite]
             ZTest LEqual
